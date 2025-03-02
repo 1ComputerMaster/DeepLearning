@@ -227,8 +227,129 @@ print(y)
 print(np.sum(y))
 
 
+#%%
+# %%[markdown]
+# # 손글씨 숫자 인식
+# ## MNIST 데이터셋
+# * flatten : 입력 이미지를 1차원으로 평탄화 할 지 여부를 묻습니다.
+# * one-hot-label : 정답 원소만 1으로 표기하는 식으로 표기 
+# * normalize : 입력 이미지의 픽셀 값을 0.0~1.0 으로 표기
+#   
+# (x_train, t_train) -> (훈련 이미지, 훈련 레이블),(x_test, t_test) -> (시험 이미지, 시험 레이블)
+#%%
+import sys, os
+sys.path.append(os.pardir)  # 부모 디렉터리의 파일을 가져올 수 있도록 설정
+import numpy as np
+from dataset.mnist import load_mnist
+from PIL import Image
+
+
+def img_show(img):
+    pil_img = Image.fromarray(np.uint8(img))
+    pil_img.show()
+
+(x_train, t_train), (x_test, t_test) = load_mnist(flatten=True, normalize=False)
+
+img = x_train[0]
+label = t_train[0]
+print(label)  # 5
+
+print(img.shape)  # (784,)
+img = img.reshape(28, 28)  # 형상을 원래 이미지의 크기로 변형
+print(img.shape)  # (28, 28)
+
+img_show(img)
+# %%
+# %%[markdown]
+#
+# ### init_network()
+# - pickle 파일인 sample_weight.pkl 에서 학습된 가중치 매개변수를 읽습니다.
+# 가중치와 편향 값이 딕셔너리 변수로 저장되어있습니다.
+#   
+# ### Softmax 함수  
+#
+# - 선형 변환 결과를 확률 분포 형식으로 바꾸어 줍니다.
+# 어떤 클래스가 가장 높은 확률을 가지는가? 가 표현됩니다.
+#
+#   
+# ### Sigmoid 함수 : 선형 결합이후 비선형 성을 높이기 위해서 사용
+#   
+# - **첫 번째 은닉층** 에서는 입력 데이터에 비선형 변환을 추가하여 복잡한 패턴을 학습할 수 있게 하고,
+# - **두 번째 은닉층** 에서도 마찬가지로 추가적인 비선형 변환을 통해 모델의 표현력을 높입니다.
+#   
+# ### 신경망의 추론 처리 예제 결과
+# - 정확도 평가 시 0.9352가 나옵니다.
+# - normalize True로 정규화 시킴 (0.0 ~ 1.0)
+# %%
+import sys, os
+sys.path.append(os.pardir)  # 부모 디렉터리의 파일을 가져올 수 있도록 설정
+import numpy as np
+import pickle
+from dataset.mnist import load_mnist
+from common.functions import sigmoid, softmax
+
+
+def get_data():
+    (x_train, t_train), (x_test, t_test) = load_mnist(normalize=True, flatten=True, one_hot_label=False)
+    return x_test, t_test
+
+
+def init_network():
+    with open("sample_weight.pkl", 'rb') as f:
+        network = pickle.load(f)
+    return network
+
+
+def predict(network, x):
+    W1, W2, W3 = network['W1'], network['W2'], network['W3']
+    b1, b2, b3 = network['b1'], network['b2'], network['b3']
+
+    a1 = np.dot(x, W1) + b1
+    z1 = sigmoid(a1)
+    a2 = np.dot(z1, W2) + b2
+    z2 = sigmoid(a2)
+    a3 = np.dot(z2, W3) + b3
+    y = softmax(a3)
+
+    return y
+
+
+x, t = get_data()
+network = init_network()
+accuracy_cnt = 0
+for i in range(len(x)):
+    y = predict(network, x[i])
+    p= np.argmax(y) # 확률이 가장 높은 원소의 인덱스를 얻는다.
+    if p == t[i]:
+        accuracy_cnt += 1
+
+print("Accuracy:" + str(float(accuracy_cnt) / len(x)))
+
+# %%
+# %%[markdown]
+# ### 배치 처리
+# - 이미지를 지폐 다발 처럼 묶어서 한 방에 처리하여 효율을 높입니다.
+# - 배치 사이즈 만큼 predict 돌리고 argmax로 axis = 1 즉, 각 배열 중 1번째 차원을 구성하는 원소의 가장 큰 값을 찾도록 설정
+# - p == t[i:i+batch_size] -> 실제 정답 값과 같은지 비교함
+# - GPU 사용량을 올릴 수 있습니다.
 # %%
 
+x, t = get_data()
+network = init_network()
+
+batch_size = 100 # 배치 크기
+accuracy_cnt = 0
+
+for i in range(0, len(x), batch_size):
+    x_batch = x[i:i+batch_size]
+    y_batch = predict(network, x_batch)
+    p = np.argmax(y_batch, axis=1)
+    accuracy_cnt += np.sum(p == t[i:i+batch_size])
+
+print("Accuracy:" + str(float(accuracy_cnt) / len(x)))
+
+
+# %%
 # %%[markdown]
 # ## 4. 결론
 
